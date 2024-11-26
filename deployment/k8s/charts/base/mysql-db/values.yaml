@@ -1,0 +1,30 @@
+chart:
+  name: mysql-db
+replicaCount: 1
+
+image:
+  repository: mysql
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3306
+  targetPort: 3306
+
+env:
+  MYSQL_ROOT_PASSWORD: root
+  MYSQL_DATABASE: postsDB
+
+volume:
+  name: mysql-db-volume
+  mountPath: /var/lib/mysql
+  persistentVolumeClaim: mysql-db-pvc
+  storage: 5Gi
+
+resources:
+  requests:
+    memory: "256Mi"
+  limits:
+    memory: "1Gi"
+

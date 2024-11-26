@@ -1,0 +1,27 @@
+chart:
+  name: api-gateway
+replicaCount: 1
+
+image:
+  repository: linkedinmsacr.azurecr.io/api-gateway
+  tag: "1"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 8080
+
+volume:
+  name: services-volume
+  mountPath: /api-gateway
+  persistentVolumeClaim: api-gateway-pvc
+  storage: 500Mi
+
+ingress:
+  ip: "172.205.94.46"
+
+resources:
+  requests:
+    memory: "256Mi"
+  limits:
+    memory: "512Mi"

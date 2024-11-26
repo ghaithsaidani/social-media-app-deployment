@@ -1,0 +1,39 @@
+chart:
+  name: connection-db
+replicaCount: 1
+
+image:
+  repository: neo4j
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 7687
+
+env:
+  NEO4J_AUTH: "neo4j/password"
+
+volumes:
+  - name: neo4j-data
+    mountPath: /data
+    persistentVolumeClaim: neo4j-data-pvc
+    storage: 1Gi
+  - name: neo4j-logs
+    mountPath: /logs
+    persistentVolumeClaim: neo4j-logs-pvc
+    storage: 1Gi
+  - name: neo4j-import
+    mountPath: /var/lib/neo4j/import
+    persistentVolumeClaim: neo4j-import-pvc
+    storage: 1Gi
+  - name: neo4j-plugins
+    mountPath: /var/lib/neo4j/plugins
+    persistentVolumeClaim: neo4j-plugins-pvc
+    storage: 1Gi
+
+resources:
+  requests:
+    memory: "512Mi"
+  limits:
+    memory: "1.5Gi"

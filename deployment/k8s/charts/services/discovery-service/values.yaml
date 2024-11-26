@@ -1,0 +1,28 @@
+chart:
+  name: discovery-service
+replicaCount: 1
+
+image:
+  repository: linkedinmsacr.azurecr.io/discovery-service
+  tag: "1"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 8761
+  #nodePort: 32333
+
+volume:
+  name: services-volume
+  mountPath: /discovery-service
+  persistentVolumeClaim: discovery-service-pvc
+  storage: 500Mi
+
+resources:
+  requests:
+    memory: "256Mi"
+  limits:
+    memory: "512Mi"
+
+ingress:
+  ip: "172.205.94.46"

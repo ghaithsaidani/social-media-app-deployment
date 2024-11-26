@@ -1,0 +1,32 @@
+chart:
+  name: kafka
+replicaCount: 1
+
+image:
+  repository: wurstmeister/kafka
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  ports:
+  - name: kafka-1
+    value: 9092
+  - name: kafka-2
+    value: 9093 
+
+env:
+  KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+  KAFKA_ADVERTISED_LISTENERS: INSIDE://kafka-broker:9092,OUTSIDE://localhost:9092
+  KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
+  KAFKA_LISTENERS: INSIDE://0.0.0.0:9092,OUTSIDE://0.0.0.0:9093
+  KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE  # Add this line
+  KAFKA_LOG_DIRS: /var/lib/kafka/data
+  KAFKA_AUTO_CREATE_TOPICS_ENABLE: 'true'
+
+resources:
+  requests:
+    memory: "512Mi"
+  limits:
+    memory: "1.5Gi"
+

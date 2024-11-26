@@ -1,0 +1,251 @@
+pipeline {
+    agent {
+        label 'connections-service-agent'
+    }
+
+    environment {
+        GITLAB_CREDENTIALS = 'gitlab-credentials'
+        VAULT_URL = credentials('vault-url')
+        VAULT_CREDENTIALS = 'vault-app-role'
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                withVault(
+                        configuration: [
+                            timeout: 60,
+                            vaultCredentialId: "${VAULT_CREDENTIALS}",
+                            vaultUrl: "${VAULT_URL}"
+                        ],
+                        vaultSecrets: [
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/common',
+                                secretValues: [
+                                    [envVar: 'GIT_REPO', vaultKey: 'git_repo'],
+                                ]
+                            ],
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/connections-service',
+                                secretValues: [
+                                    [envVar: 'IMAGE_NAME', vaultKey: 'image_name'],
+                                ]
+                            ]
+                        ]) {
+                            git branch: 'main', url: "${env.GIT_REPO}/${env.IMAGE_NAME}", credentialsId: "${GITLAB_CREDENTIALS}"
+                        }
+            }
+        }
+
+        stage('Login to Azure') {
+            steps {
+                script {
+                    withVault(
+                        configuration: [
+                            timeout: 60,
+                            vaultCredentialId: "${VAULT_CREDENTIALS}",
+                            vaultUrl: "${VAULT_URL}"
+                        ],
+                        vaultSecrets: [
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/azure-credentials',
+                                secretValues: [
+                                    [envVar: 'AZURE_CLIENT_ID', vaultKey: 'client_id'],
+                                    [envVar: 'AZURE_CLIENT_SECRET', vaultKey: 'client_secret'],
+                                    [envVar: 'AZURE_TENANT_ID', vaultKey: 'tenant_id']
+                                ]
+                            ],
+                        ]) {
+                        sh "az login --service-principal -u ${AZURE_CLIENT_ID} -p ${AZURE_CLIENT_SECRET} --tenant ${AZURE_TENANT_ID}"
+                        }
+                }
+            }
+        }
+
+        stage('get last image Tag') {
+            steps {
+                script {
+                    withVault(
+                        configuration: [
+                            timeout: 60,
+                            vaultCredentialId: "${VAULT_CREDENTIALS}",
+                            vaultUrl: "${VAULT_URL}"
+                        ],
+                        vaultSecrets: [
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/common',
+                                secretValues: [
+                                    [envVar: 'REGISTRY_NAME', vaultKey: 'registry_name']
+                                ]
+                            ],
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/connections-service',
+                                secretValues: [
+                                    [envVar: 'IMAGE_NAME', vaultKey: 'image_name']
+                                ]
+                            ]
+                        ]) {
+                        try {
+                            def tags = sh(script: "az acr repository show-tags --name ${REGISTRY_NAME} --repository ${IMAGE_NAME} --orderby time_desc -o tsv", returnStdout: true).trim()
+
+                            def lastTag = tags.tokenize('\n')[0] ?: '0'
+
+                            def newTag = lastTag.toInteger() + 1
+                            env.IMAGE_TAG = newTag.toString()
+                            } catch (Exception e) {
+                            env.IMAGE_TAG = '1'
+                        }
+                        }
+                }
+            }
+        }
+
+        stage('Build Docker Image') {
+            steps {
+                withVault(
+                    configuration: [
+                        timeout: 60,
+                        vaultCredentialId: "${VAULT_CREDENTIALS}",
+                        vaultUrl: "${VAULT_URL}"
+                    ],
+                    vaultSecrets: [
+                        [
+                            engineVersion: 1,
+                            path: 'jenkins/pipeline-secrets/common',
+                            secretValues: [
+                                [envVar: 'REGISTRY_URL', vaultKey: 'registry_url']
+                            ]
+                        ],
+                        [
+                            engineVersion: 1,
+                            path: 'jenkins/pipeline-secrets/connections-service',
+                            secretValues: [
+                                [envVar: 'IMAGE_NAME', vaultKey: 'image_name']
+                            ]
+                        ]
+                    ]) {
+                        container('docker') {
+                            sh "docker build -t ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG} ."
+                        }
+                    }
+            }
+        }
+
+        stage('Login to ACR') {
+            steps {
+                script {
+                    withVault(
+                    configuration: [
+                        timeout: 60,
+                        vaultCredentialId: "${VAULT_CREDENTIALS}",
+                        vaultUrl: "${VAULT_URL}"
+                    ],
+                    vaultSecrets: [
+                        [
+                            engineVersion: 1,
+                            path: 'jenkins/pipeline-secrets/common',
+                            secretValues: [
+                                [envVar: 'REGISTRY_URL', vaultKey: 'registry_url']
+                            ]
+                        ],
+                        [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/acr-credentials',
+                                secretValues: [
+                                    [envVar: 'ACR_USERNAME', vaultKey: 'username'],
+                                    [envVar: 'ACR_PASSWORD', vaultKey: 'password']
+                                ]
+                            ],
+                    ]) {
+                        container('docker') {
+                            sh "docker login ${REGISTRY_URL} -u ${ACR_USERNAME} -p ${ACR_PASSWORD}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Push Docker Image to ACR') {
+            steps {
+                script {
+                    withVault(
+                    configuration: [
+                        timeout: 60,
+                        vaultCredentialId: "${VAULT_CREDENTIALS}",
+                        vaultUrl: "${VAULT_URL}"
+                    ],
+                    vaultSecrets: [
+                        [
+                            engineVersion: 1,
+                            path: 'jenkins/pipeline-secrets/common',
+                            secretValues: [
+                                [envVar: 'REGISTRY_URL', vaultKey: 'registry_url']
+                            ]
+                        ],
+                        [
+                            engineVersion: 1,
+                            path: 'jenkins/pipeline-secrets/connections-service',
+                            secretValues: [
+                                [envVar: 'IMAGE_NAME', vaultKey: 'image_name']
+                            ]
+                        ]
+                    ]) {
+                        container('docker') {
+                            sh "docker push ${REGISTRY_URL}/${IMAGE_NAME}:${IMAGE_TAG}"
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('Argo CD Deployment') {
+            steps {
+                script {
+                    withVault(
+                    configuration: [
+                        timeout: 60,
+                        vaultCredentialId: "${VAULT_CREDENTIALS}",
+                        vaultUrl: "${VAULT_URL}"
+                    ],
+                    vaultSecrets: [
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/argocd-credentials',
+                                secretValues: [
+                                    [envVar: 'ARGOCD_USERNAME', vaultKey: 'username'],
+                                    [envVar: 'ARGOCD_PASSWORD', vaultKey: 'password']
+                                ]
+                            ],
+                            [
+                                engineVersion: 1,
+                                path: 'jenkins/pipeline-secrets/argocd-server',
+                                secretValues: [
+                                    [envVar: 'ARGOCD_SERVER', vaultKey: 'value'],
+                                ]
+                            ],
+                            [
+                            engineVersion: 1,
+                            path: 'jenkins/pipeline-secrets/connections-service',
+                            secretValues: [
+                                [envVar: 'IMAGE_NAME', vaultKey: 'image_name']
+                            ]
+                        ]
+                    ]) {
+                                sh """
+                                    argocd login ${ARGOCD_SERVER} --username ${ARGOCD_USERNAME} --password ${ARGOCD_PASSWORD} --insecure \
+
+                                    argocd app set ${IMAGE_NAME} --parameter image.tag=${IMAGE_TAG} \
+
+                                    argocd app sync ${IMAGE_NAME}
+                                """
+                    }
+                }
+            }
+        }
+    }
+}

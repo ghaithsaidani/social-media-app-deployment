@@ -1,0 +1,29 @@
+chart:
+  name: post-service
+replicaCount: 1
+
+image:
+  repository: linkedinmsacr.azurecr.io/post-service
+  tag: "1"
+  pullPolicy: Always
+
+service:
+  type: ClusterIP
+  port: 9010
+
+volume:
+  name: services-volume
+  mountPath: /post-service
+  persistentVolumeClaim: post-service-pvc
+  storage: 500Mi
+
+resources:
+  requests:
+    memory: "256Mi"
+  limits:
+    memory: "512Mi"
+
+env:
+  SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/postsDB
+  SPRING_DATASOURCE_USERNAME: root
+  SPRING_DATASOURCE_PASSWORD: root
