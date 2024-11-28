@@ -7,7 +7,7 @@ This repository provides a complete infrastructure and deployment pipeline for a
 To clone the repository along with all its submodules, run the following command:
 
 ```bash
-git clone https://github.com/ghaithsaidani/linkedin-microservices-deployment
+git clone https://github.com/ghaithsaidani/social-media-app-deployment
 ```
 ---
 
